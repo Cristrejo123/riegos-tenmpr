@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -21,6 +22,7 @@
     .franja { margin-bottom:5px; }
     .franja span { margin:0 5px; }
     .remove { color:red; cursor:pointer; font-weight:bold; }
+    .send-schedule { background:#0077cc; color:white; }
   </style>
 </head>
 <body>
@@ -33,6 +35,9 @@
 </div>
 
 <div id="riegos"></div>
+
+<!-- Botón global para enviar todos los horarios al broker -->
+<button class="send-schedule" onclick="enviarTodosHorarios()">📤 Enviar todos los horarios al broker</button>
 
 <script>
   // ======================== MQTT ========================
@@ -62,7 +67,7 @@
     riegos.push({
       id: i,
       estado: "OFF",
-      horarios: [] // array de {inicio, fin}
+      horarios: [] // array de {inicio, fin, id}
     });
   }
 
@@ -111,6 +116,7 @@
     riego.horarios.push({inicio, fin, id:idFranja});
 
     actualizarFranjas(num);
+    enviarHorariosRiego(num); // publicar automáticamente los horarios de este riego
   }
 
   // ======================== Función actualizar lista de franjas ========================
@@ -131,9 +137,29 @@
     const riego = riegos.find(r=>r.id===num);
     riego.horarios = riego.horarios.filter(f=>f.id!==id);
     actualizarFranjas(num);
+    enviarHorariosRiego(num); // publicar automáticamente los horarios actualizados
   }
 
-  // ======================== Revisar horarios ========================
+  // ======================== Publicar horarios de un riego al broker ========================
+  function enviarHorariosRiego(num){
+    const riego = riegos.find(r=>r.id===num);
+    const payload = JSON.stringify({ [`riego${num}`]: riego.horarios });
+    client.publish("campo1/horarios", payload);
+    console.log("📡 Horarios enviados:", payload);
+  }
+
+  // ======================== Publicar todos los horarios al broker ========================
+  function enviarTodosHorarios(){
+    const payload = {};
+    riegos.forEach(r => {
+      payload[`riego${r.id}`] = r.horarios;
+    });
+    client.publish("campo1/horarios", JSON.stringify(payload));
+    console.log("📡 Todos los horarios enviados:", JSON.stringify(payload));
+    alert("Todos los horarios enviados al broker MQTT!");
+  }
+
+  // ======================== Revisar horarios y activar riegos automáticamente ========================
   setInterval(()=>{
     const ahora = new Date();
     const h = ahora.getHours().toString().padStart(2,"0");
@@ -153,4 +179,3 @@
 </script>
 </body>
 </html>
-<!DOCTYPE html>
