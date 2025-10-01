@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Control de Riegos LoRa</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  
+  <!-- 📦 Cargamos la librería MQTT desde un CDN -->
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
+  <style>
+    /* 🎨 Estilos generales de la página */
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin: 20px;
+      background: #f4f4f4;
+    }
+    h2 {
+      color: #333;
+      margin-bottom: 20px;
+    }
+
+    /* 💧 Caja de cada riego (tipo acordeón) */
+    .accordion {
+      background: white;
+      padding: 15px;
+      margin: 10px auto;
+      border-radius: 10px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+      cursor: pointer;
+      transition: 0.3s;
+      max-width: 500px;
+      text-align: left;
+    }
+    .accordion:hover {
+      box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+    }
+
+    /* 📦 Panel desplegable (botones ON/OFF) */
+    .panel {
+      padding: 15px;
+      display: none; /* oculto por defecto */
+      background: #e9e9e9;
+      margin-top: 10px;
+      border-radius: 5px;
+      text-align: center;
+    }
+
+    /* 🔘 Botones */
+    button {
+      padding: 10px 20px;
+      margin: 5px;
+      border: none;
+      border-radius: 5px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: 0.3s;
+      font-size: 16px;
+    }
+    .on {
+      background-color: #4CAF50;
+      color: white;
+    }
+    .on:hover {
+      background-color: #45a049;
+    }
+    .off {
+      background-color: #f44336;
+      color: white;
+    }
+    .off:hover {
+      background-color: #da190b;
+    }
+
+    .estado {
+      font-weight: bold;
+    }
+
+    /* 📊 Caja de temperatura */
+    .temp-box {
+      max-width: 400px;
+      margin: 20px auto;
+      background: #fff;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    }
+    .temp-value {
+      font-size: 2em;
+      color: #0077cc;
+      font-weight: bold;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h2>💧 Panel de Control de Riegos LoRa</h2>
+
+  <!-- 🌡️ Caja que muestra la temperatura actual -->
+  <div class="temp-box">
+    <h3>🌡️ Temperatura actual</h3>
+    <div class="temp-value" id="tempValue">-- °C</div>
+  </div>
+
+  <!-- 📦 Aquí se generan dinámicamente los 8 módulos de riego -->
+  <div id="riegos"></div>
+
+  <script>
+    // ✅ 1. Conexión al broker MQTT (vía WebSockets seguros wss://)
+    const client = mqtt.connect("wss://f5f8fae4d9aa4d8690cb5ff83429436c.s1.eu.hivemq.cloud:8884/mqtt", {
+      username: "Lora123", // usuario MQTT
+      password: "Lora1234" // contraseña MQTT
+    });
+
+    // ✅ 2. Cuando se conecta al broker:
+    client.on("connect", () => {
+      console.log("✅ Conectado al broker MQTT");
+
+      // 🔁 Nos suscribimos al estado de cada uno de los 8 riegos
+      for (let i = 1; i <= 8; i++) {
+        client.subscribe(`campo1/riego${i}/estado`);
+      }
+
+      // 📡 También nos suscribimos al sensor de temperatura
+      client.subscribe("sensor/temperatura");
+      console.log("📡 Suscrito a sensor/temperatura");
+    });
+
+    // ✅ 3. Cuando llega un mensaje MQTT:
+    client.on("message", (topic, message) => {
+      const msg = message.toString(); // convertimos el mensaje a texto
+      console.log("📩 Mensaje recibido:", topic, msg);
+
+      // 🔄 Si el mensaje es el estado de alguno de los riegos:
+      for (let i = 1; i <= 8; i++) {
+        if (topic === `campo1/riego${i}/estado`) {
+          // Actualizamos el texto en pantalla (ON/OFF/DESCONOCIDO)
+          document.getElementById(`estado${i}`).innerText = msg;
+        }
+      }
+
+      // 🌡️ Si el mensaje es la temperatura, actualizamos el valor en tiempo real
+      if (topic === "sensor/temperatura") {
+        document.getElementById("tempValue").innerText = `${msg} °C`;
+      }
+    });
+
+    // ✅ 4. Crear dinámicamente los 8 módulos de riego con botones ON/OFF
+    const contenedor = document.getElementById("riegos");
+    for (let i = 1; i <= 8; i++) {
+      contenedor.innerHTML += `
+        <div class="accordion">💧 Riego ${i} - Estado: 
+          <span class="estado" id="estado${i}">DESCONOCIDO</span>
+        </div>
+        <div class="panel">
+          <button class="on" onclick="enviarComando(${i}, 'ON')">ON</button>
+          <button class="off" onclick="enviarComando(${i}, 'OFF')">OFF</button>
+        </div>
+      `;
+    }
+
+    // ✅ 5. Configurar el comportamiento del acordeón (mostrar/ocultar botones)
+    document.querySelectorAll(".accordion").forEach((acc) => {
+      acc.addEventListener("click", () => {
+        const panel = acc.nextElementSibling;
+        panel.style.display = panel.style.display === "block" ? "none" : "block";
+      });
+    });
+
+    // ✅ 6. Función para enviar comandos MQTT al broker
+    function enviarComando(num, cmd) {
+      const topic = `campo1/riego${num}/comando`; // topic del riego correspondiente
+      client.publish(topic, cmd); // enviamos el comando ("ON" o "OFF")
+      console.log(`📤 Comando enviado a ${topic}: ${cmd}`);
+
+      // 🪄 Actualizamos el estado en pantalla inmediatamente (sin esperar respuesta)
+      document.getElementById(`estado${num}`).innerText = cmd;
+    }
+  </script>
+</body>
+</html>
