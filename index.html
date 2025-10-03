@@ -5,34 +5,50 @@
   <title>Control de Riegos LoRa</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
   <style>
     body { font-family: Arial; text-align:center; margin:20px; background:#f4f4f4; }
     h2 { color:#333; margin-bottom:20px; }
-    .accordion { background:white; padding:15px; margin:10px auto; border-radius:10px; box-shadow:0 4px 8px rgba(0,0,0,0.2); cursor:pointer; max-width:500px; text-align:left; }
-    .panel { padding:15px; display:none; background:#e9e9e9; margin-top:10px; border-radius:5px; text-align:center; }
-    button { padding:10px 20px; margin:5px; border:none; border-radius:5px; font-weight:bold; cursor:pointer; font-size:16px; }
+    .accordion {
+      background:white; padding:15px; margin:10px auto;
+      border-radius:10px; box-shadow:0 4px 8px rgba(0,0,0,0.2);
+      cursor:pointer; max-width:500px; text-align:left;
+    }
+    .panel {
+      padding:15px; display:none;
+      background:#e9e9e9; margin-top:10px;
+      border-radius:5px; text-align:center;
+    }
+    button {
+      padding:10px 20px; margin:5px;
+      border:none; border-radius:5px;
+      font-weight:bold; cursor:pointer;
+      font-size:16px;
+    }
     .on { background-color:#4CAF50; color:white; }
     .off { background-color:#f44336; color:white; }
     .estado { font-weight:bold; }
-    .temp-box { max-width:400px; margin:20px auto; background:#fff; padding:20px; border-radius:12px; box-shadow:0 4px 8px rgba(0,0,0,0.2); }
-    .temp-value { font-size:2em; color:#0077cc; font-weight:bold; }
     input[type=time] { padding:5px; margin:5px; font-size:14px; }
     .schedule { margin-top:10px; border-top:1px solid #ccc; padding-top:10px; }
     .franja { margin-bottom:5px; }
     .franja span { margin:0 5px; }
     .remove { color:red; cursor:pointer; font-weight:bold; }
-    .send-schedule { background:#0077cc; color:white; }
+    .sensor-box {
+      background:#fff; padding:10px; margin:10px auto;
+      border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,0.15);
+      max-width:300px;
+    }
+    .sensor-box h4 { margin:5px 0; }
+    .sensor-value { font-size:1.4em; font-weight:bold; }
+    .temp { color:#0077cc; }
+    .hum { color:#009688; }
   </style>
 </head>
 <body>
 
 <h2>💧 Panel de Control de Riegos LoRa</h2>
 
-<div class="temp-box">
-  <h3>🌡️ Temperatura actual</h3>
-  <div class="temp-value" id="tempValue">-- °C</div>
-</div>
-
+<!-- 🪄 Ya no hay cuadro global de temperatura -->
 <div id="riegos"></div>
 
 <script>
@@ -44,17 +60,36 @@
 
   client.on("connect", () => {
     console.log("✅ Conectado al broker MQTT");
-    for (let i = 1; i <= 8; i++) client.subscribe(`campo1/riego${i}/estado`);
-    client.subscribe("sensor/temperatura");
+
+    // Nos suscribimos a todos los estados, temperaturas y humedades
+    for (let i = 1; i <= 8; i++) {
+      client.subscribe(`campo1/riego${i}/estado`);
+      client.subscribe(`campo1/riego${i}/temperatura`);
+      client.subscribe(`campo1/riego${i}/humedad`);
+    }
   });
 
   client.on("message", (topic, message) => {
     const msg = message.toString();
-    if(topic.startsWith("campo1/riego")) {
+    console.log("📩", topic, msg);
+
+    // Actualizar estado ON/OFF
+    if (topic.includes("/estado")) {
       const id = topic.match(/\d+/)[0];
       document.getElementById(`estado${id}`).innerText = msg;
     }
-    if(topic==="sensor/temperatura") document.getElementById("tempValue").innerText = `${msg} °C`;
+
+    // Actualizar temperatura específica
+    if (topic.includes("/temperatura")) {
+      const id = topic.match(/\d+/)[0];
+      document.getElementById(`temp${id}`).innerText = `${msg} °C`;
+    }
+
+    // Actualizar humedad específica
+    if (topic.includes("/humedad")) {
+      const id = topic.match(/\d+/)[0];
+      document.getElementById(`hum${id}`).innerText = `${msg} %`;
+    }
   });
 
   // ======================== Riegos ========================
@@ -73,11 +108,21 @@
     contenedor.innerHTML += `
       <div class="accordion">💧 Riego ${r.id} - Estado: <span class="estado" id="estado${r.id}">DESCONOCIDO</span></div>
       <div class="panel">
+        <!-- 📊 Sensor box -->
+        <div class="sensor-box">
+          <h4>🌡️ Temperatura: <span class="sensor-value temp" id="temp${r.id}">-- °C</span></h4>
+          <h4>💧 Humedad: <span class="sensor-value hum" id="hum${r.id}">-- %</span></h4>
+        </div>
+
+        <!-- 🔘 Control manual -->
         <button class="on" onclick="enviarComando(${r.id}, 'ON')">ON</button>
         <button class="off" onclick="enviarComando(${r.id}, 'OFF')">OFF</button>
+
+        <!-- 🕐 Programación -->
         <div class="schedule" id="schedule${r.id}">
           <h4>Programar horarios</h4>
-          Inicio: <input type="time" id="inicio${r.id}"> Fin: <input type="time" id="fin${r.id}">
+          Inicio: <input type="time" id="inicio${r.id}"> 
+          Fin: <input type="time" id="fin${r.id}">
           <button onclick="agregarFranja(${r.id})">Agregar</button>
           <div id="franjas${r.id}"></div>
         </div>
@@ -85,6 +130,7 @@
     `;
   });
 
+  // ======================== Acordeones ========================
   document.querySelectorAll(".accordion").forEach(acc=>{
     acc.addEventListener("click", ()=>{
       const panel = acc.nextElementSibling;
@@ -92,7 +138,7 @@
     });
   });
 
-  // ======================== Función enviar comando ========================
+  // ======================== Enviar comando ON/OFF ========================
   function enviarComando(num, cmd){
     const topic = `campo1/riego${num}/comando`;
     client.publish(topic, cmd);
@@ -101,7 +147,7 @@
     riego.estado = cmd;
   }
 
-  // ======================== Función agregar franja horaria ========================
+  // ======================== Agregar franja ========================
   function agregarFranja(num){
     const inicio = document.getElementById(`inicio${num}`).value;
     const fin = document.getElementById(`fin${num}`).value;
@@ -112,10 +158,10 @@
     riego.horarios.push({inicio, fin, id:idFranja});
 
     actualizarFranjas(num);
-    enviarHorariosRiego(num); // publicar automáticamente los horarios de este riego
+    enviarHorariosRiego(num); // publicar automáticamente horarios actualizados
   }
 
-  // ======================== Función actualizar lista de franjas ========================
+  // ======================== Mostrar franjas ========================
   function actualizarFranjas(num){
     const riego = riegos.find(r=>r.id===num);
     const cont = document.getElementById(`franjas${num}`);
@@ -128,15 +174,15 @@
     });
   }
 
-  // ======================== Función eliminar franja ========================
+  // ======================== Eliminar franja ========================
   function eliminarFranja(num,id){
     const riego = riegos.find(r=>r.id===num);
     riego.horarios = riego.horarios.filter(f=>f.id!==id);
     actualizarFranjas(num);
-    enviarHorariosRiego(num); // publicar automáticamente los horarios actualizados
+    enviarHorariosRiego(num);
   }
 
-  // ======================== Publicar horarios de un riego al broker ========================
+  // ======================== Publicar horarios al broker ========================
   function enviarHorariosRiego(num){
     const riego = riegos.find(r=>r.id===num);
     const payload = JSON.stringify({ [`riego${num}`]: riego.horarios });
@@ -144,18 +190,7 @@
     console.log("📡 Horarios enviados:", payload);
   }
 
-  // ======================== Publicar todos los horarios al broker ========================
-  function enviarTodosHorarios(){
-    const payload = {};
-    riegos.forEach(r => {
-      payload[`riego${r.id}`] = r.horarios;
-    });
-    client.publish("campo1/horarios", JSON.stringify(payload));
-    console.log("📡 Todos los horarios enviados:", JSON.stringify(payload));
-    alert("Todos los horarios enviados al broker MQTT!");
-  }
-
-  // ======================== Revisar horarios y activar riegos automáticamente ========================
+  // ======================== Control automático ========================
   setInterval(()=>{
     const ahora = new Date();
     const h = ahora.getHours().toString().padStart(2,"0");
@@ -171,7 +206,7 @@
       if(!encendido && r.estado!=="OFF") enviarComando(r.id,"OFF");
     });
   },60000);
-
 </script>
 </body>
 </html>
+
