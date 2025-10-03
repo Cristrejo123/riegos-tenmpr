@@ -121,23 +121,12 @@
         <!-- 🌿 Temporizador -->
         <div class="timer-section">
           <h4>⏱️ Encender con temporizador</h4>
+          <input type="number" id="horas${r.id}" min="0" placeholder="hh" style="width:50px;"> :
+          <input type="number" id="minutos${r.id}" min="0" max="59" placeholder="mm" style="width:50px;"> 
+          <button onclick="activarTemporizador(${r.id})">Activar temporizador</button>
+          <div id="contador${r.id}" style="margin-top:5px;color:#0077cc;font-weight:bold;"></div>
+          </div>
 
-        <!-- Cambiamos el input a type="time" con segundos -->
-        <input 
-          type="time" 
-          id="timer${r.id}" 
-          step="1" 
-          value="00:00:00"> 
-        <!-- step="1" permite segundos -->
-
-        <!-- 👇 Explicación del formato -->
-        <div style="font-size: 0.9em; color: #555; margin-top: 4px;">
-          Formato: <strong>HH:MM:SS</strong> (ej: 01:30:00 para 1h 30min)
-        </div>
-
-        <button onclick="activarTemporizador(${r.id})">Activar temporizador</button>
-        <div id="contador${r.id}" style="margin-top:5px;color:#0077cc;font-weight:bold;"></div>
-        </div>
       </div>
     `;
   });
@@ -160,29 +149,19 @@
   }
 
 function activarTemporizador(num) {
-  const tiempoInput = document.getElementById(`timer${num}`).value;
+  const h = parseInt(document.getElementById(`horas${num}`).value) || 0;
+  const m = parseInt(document.getElementById(`minutos${num}`).value) || 0;
 
-  if (!tiempoInput) {
-    alert("⏱️ Ingresa un tiempo válido en formato HH:MM:SS");
-    return;
-  }
+  const tiempoTotal = h*60 + m; // tiempo total en minutos
+  if(tiempoTotal <= 0) return alert("⏱️ Ingresa un tiempo mayor a 0");
 
-  // 🔢 Separar horas, minutos y segundos
-  const [h, m, s] = tiempoInput.split(":").map(Number);
-  const tiempoTotal = (h * 3600) + (m * 60) + s;
+  // Enviar comando al riego en minutos
+  client.publish(`campo1/riego${num}/comando`, `TIMER:${tiempoTotal}`);
 
-  if (tiempoTotal <= 0) {
-    alert("⏱️ El tiempo debe ser mayor a 0");
-    return;
-  }
-
-  // 🚿 Enviar comando ON con duración al riego
-  enviarComando(num, `TIMER:${tiempoTotal}`);
-
-  // 🔔 Mostrar mensaje simple de confirmación
-  const contadorDiv = document.getElementById(`contador${num}`);
-  contadorDiv.innerText = `⏱️ Temporizador enviado al riego ${num}`;
+  // Mostrar confirmación
+  document.getElementById(`contador${num}`).innerText = `⏱️ Temporizador enviado al riego ${num} (${h}h ${m}min)`;
 }
+
 
 
 </script>
