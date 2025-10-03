@@ -123,16 +123,16 @@
         <h4>⏱️ Encender con temporizador</h4>
         <input 
           type="time" 
-          id="timer1" 
+          id="timer${r.id}" 
           step="60" 
-          value="00:30"> <!-- valor por defecto 0h30min -->
+          value="00:30"> 
 
-        <button onclick="activarTemporizador(1)">Activar temporizador</button>
-        <div id="contador1" style="margin-top:5px;color:#0077cc;font-weight:bold;"></div>
+      <button onclick="activarTemporizador(${r.id})">Activar temporizador</button>
+      <div id="contador${r.id}" style="margin-top:5px;color:#0077cc;font-weight:bold;"></div>
 
-        <div style="font-size: 0.9em; color: #555; margin-top: 4px;">
-          Formato: <strong>HH:MM</strong> (ej: 01:30 para 1h 30min)
-        </div>  
+      <div style="font-size: 0.9em; color: #555; margin-top: 4px;">
+        Formato: <strong>HH:MM</strong> (ej: 01:30 para 1h 30min)
+      </div>  
       </div>
     `;
   });
@@ -155,19 +155,16 @@
   }
 
 function activarTemporizador(num) {
-  const tiempoInput = document.getElementById(`timer${num}`).value; // HH:MM
+  const tiempoInput = document.getElementById(`timer${num}`).value; // toma el input correcto
   if (!tiempoInput) return alert("⏱️ Ingresa un tiempo válido");
 
   const [h, m] = tiempoInput.split(":").map(Number);
   const tiempoTotal = h*60 + m; // total en minutos
-
   if(tiempoTotal <= 0) return alert("⏱️ El tiempo debe ser mayor a 0");
 
-  // Enviar comando al broker con número de riego
   const mensaje = `TIMER${num}:${tiempoTotal}`;
   client.publish(`campo1/riego${num}/comando`, mensaje);
 
-  // Confirmación simple
   document.getElementById(`contador${num}`).innerText = `⏱️ Temporizador enviado al riego ${num} (${h}h ${m}min)`;
 }
 
@@ -175,4 +172,5 @@ function activarTemporizador(num) {
 </script>
 </body>
 </html>
+
 
