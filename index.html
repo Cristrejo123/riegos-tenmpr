@@ -1,155 +1,19 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <title>Control de Riegos LoRa</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+/*
+  Gateway LoRa-MQTT para control de riego
 
-  <style>
-    body { font-family: Arial; text-align:center; margin:20px; background:#f4f4f4; }
-    h2 { color:#333; margin-bottom:20px; }
-    .accordion {
-      background:white; padding:15px; margin:10px auto;
-      border-radius:10px; box-shadow:0 4px 8px rgba(0,0,0,0.2);
-      cursor:pointer; max-width:500px; text-align:left;
-    }
-    .panel {
-      padding:15px; display:none;
-      background:#e9e9e9; margin-top:10px;
-      border-radius:5px; text-align:center;
-    }
-    button {
-      padding:10px 20px; margin:5px;
-      border:none; border-radius:5px;
-      font-weight:bold; cursor:pointer;
-      font-size:16px;
-    }
-    .on { background-color:#4CAF50; color:white; }
-    .off { background-color:#f44336; color:white; }
-    .timer-btn {
-      background-color: #0077cc;
-      color: white;
-      transition: background 0.2s;
-    }
-    .timer-btn:hover {
-      background-color: #005fa3;
-    }
-    .estado { font-weight:bold; }
-    input[type=time] { padding:5px; margin:5px; font-size:14px; }
-    .sensor-box {
-      background:#fff; padding:10px; margin:10px auto;
-      border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,0.15);
-      max-width:300px;
-    }
-    .sensor-box h4 { margin:5px 0; }
-    .sensor-value { font-size:1.4em; font-weight:bold; }
-    .temp { color:#0077cc; }
-    .hum { color:#009688; }
-  </style>
-</head>
-<body>
+  Funcionalidades principales:
+  - Conecta el ESP8266 a WiFi y a un broker MQTT seguro.
+  - Controla hasta 8 válvulas/relés, recibiendo comandos MQTT para encender ("ON") o apagar ("OFF") cada válvula.
+  - Envía los comandos recibidos a los nodos LoRa correspondientes.
+  - Recibe mensajes de estado de cada nodo por LoRa y publica el estado en los topics MQTT.
+  - Maneja consultas individuales de estado (por ejemplo "status1") enviando la solicitud al nodo correspondiente.
+  - Maneja consultas globales/broadcast (topic "campo1/broadcast" con mensaje "STATUS_ALL") enviando un broadcast LoRa a todos los nodos para conocer su estado.
+  - Implementa un timeout para marcar nodos como "DESCONECTADO" si no responden a tiempo.
+  - Serial monitor muestra la actividad MQTT y LoRa para depuración.
+  
+  Observaciones:
+  - Cada nodo debe tener un identificador único para que las respuestas sean correctas.
+  - El sistema está diseñado para reducir colisiones al manejar broadcast y consultas múltiples.
+*/
 
-<h2>💧 Panel de Control de Riegos LoRa</h2>
-
-<div id="riegos"></div>
-
-<script>
-  // ======================== MQTT ========================
-  const client = mqtt.connect("wss://f5f8fae4d9aa4d8690cb5ff83429436c.s1.eu.hivemq.cloud:8884/mqtt", {
-    username: "Lora123",
-    password: "Lora1234"
-  });
-
-  client.on("connect", () => {
-    console.log("✅ Conectado al broker MQTT");
-    for (let i = 1; i <= 8; i++) {
-      client.subscribe(`campo1/riego${i}/estado`);
-      client.subscribe(`campo1/riego${i}/temperatura`);
-      client.subscribe(`campo1/riego${i}/humedad`);
-    }
-  });
-
-  client.on("message", (topic, message) => {
-    const msg = message.toString();
-    console.log("📩", topic, msg);
-    if (topic.includes("/estado")) {
-      const id = topic.match(/\d+/)[0];
-      document.getElementById(`estado${id}`).innerText = msg;
-    }
-    if (topic.includes("/temperatura")) {
-      const id = topic.match(/\d+/)[0];
-      document.getElementById(`temp${id}`).innerText = `${msg} °C`;
-    }
-    if (topic.includes("/humedad")) {
-      const id = topic.match(/\d+/)[0];
-      document.getElementById(`hum${id}`).innerText = `${msg} %`;
-    }
-  });
-
-  // ======================== Crear interfaz ========================
-  const contenedor = document.getElementById("riegos");
-  for(let i=1;i<=8;i++){
-    contenedor.innerHTML += `
-      <div class="accordion">💧 Riego ${i} - Estado: <span class="estado" id="estado${i}">DESCONOCIDO</span></div>
-      <div class="panel">
-        <div class="sensor-box">
-          <h4>🌡️ Temperatura: <span class="sensor-value temp" id="temp${i}">-- °C</span></h4>
-          <h4>💧 Humedad: <span class="sensor-value hum" id="hum${i}">-- %</span></h4>
-        </div>
-
-        <button class="on" onclick="enviarComando(${i}, 'ON')">ON</button>
-        <button class="off" onclick="enviarComando(${i}, 'OFF')">OFF</button>
-        
-        <!-- 🌿 Programar inicio y duración -->
-        <div class="timer-section">
-          <h4>⏱️ Programar inicio y duración</h4>
-          <label>Hora de inicio:</label><br>
-          <input type="time" id="horaInicio${i}" step="60" value="06:00"><br>
-
-          <label>Duración (HH:MM):</label><br>
-          <input type="time" id="duracion${i}" step="60" value="00:30"><br>
-
-          <button class="timer-btn" onclick="programarTemporizador(${i})">Programar temporizador</button>
-          <div id="confirmacion${i}" style="margin-top:5px;color:#0077cc;font-weight:bold;"></div>
-        </div>
-      </div>
-    `;
-  }
-
-  // ======================== Acordeones ========================
-  document.querySelectorAll(".accordion").forEach(acc=>{
-    acc.addEventListener("click", ()=>{
-      const panel = acc.nextElementSibling;
-      panel.style.display = panel.style.display==="block"?"none":"block";
-    });
-  });
-
-  // ======================== Enviar comando manual ========================
-  function enviarComando(num, cmd){
-    const topic = `campo1/riego${num}/comando`;
-    client.publish(topic, cmd);
-    document.getElementById(`estado${num}`).innerText = cmd;
-  }
-
-  // ======================== Programar temporizador ========================
-  function programarTemporizador(num){
-    const horaInicio = document.getElementById(`horaInicio${num}`).value;
-    const duracion = document.getElementById(`duracion${num}`).value;
-
-    if(!horaInicio || !duracion){
-      alert("⚠️ Ingresa una hora de inicio y duración válida");
-      return;
-    }
-
-    // Mensaje con formato: STARTTIMERn:HH:MM-DURACIONHH:MM
-    const mensaje = `STARTTIMER${num}:${horaInicio}-${duracion}`;
-    client.publish(`campo1/riego${num}/comando`, mensaje);
-
-    document.getElementById(`confirmacion${num}`).innerText = 
-      `✅ Temporizador enviado: se encenderá a las ${horaInicio} durante ${duracion} (HH:MM)`;
-  }
-</script>
-</body>
-</html>
 
