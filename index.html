@@ -1,183 +1,211 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Control de Riegos LoRa</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  
-  <!-- 📦 Cargamos la librería MQTT desde un CDN -->
-  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<meta charset="UTF-8">
+<title>Control de Riegos LoRa</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 
-  <style>
-    /* 🎨 Estilos generales de la página */
-    body {
-      font-family: Arial, sans-serif;
-      text-align: center;
-      margin: 20px;
-      background: #f4f4f4;
-    }
-    h2 {
-      color: #333;
-      margin-bottom: 20px;
-    }
-
-    /* 💧 Caja de cada riego (tipo acordeón) */
-    .accordion {
-      background: white;
-      padding: 15px;
-      margin: 10px auto;
-      border-radius: 10px;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-      cursor: pointer;
-      transition: 0.3s;
-      max-width: 500px;
-      text-align: left;
-    }
-    .accordion:hover {
-      box-shadow: 0 6px 12px rgba(0,0,0,0.3);
-    }
-
-    /* 📦 Panel desplegable (botones ON/OFF) */
-    .panel {
-      padding: 15px;
-      display: none; /* oculto por defecto */
-      background: #e9e9e9;
-      margin-top: 10px;
-      border-radius: 5px;
-      text-align: center;
-    }
-
-    /* 🔘 Botones */
-    button {
-      padding: 10px 20px;
-      margin: 5px;
-      border: none;
-      border-radius: 5px;
-      font-weight: bold;
-      cursor: pointer;
-      transition: 0.3s;
-      font-size: 16px;
-    }
-    .on {
-      background-color: #4CAF50;
-      color: white;
-    }
-    .on:hover {
-      background-color: #45a049;
-    }
-    .off {
-      background-color: #f44336;
-      color: white;
-    }
-    .off:hover {
-      background-color: #da190b;
-    }
-
-    .estado {
-      font-weight: bold;
-    }
-
-    /* 📊 Caja de temperatura */
-    .temp-box {
-      max-width: 400px;
-      margin: 20px auto;
-      background: #fff;
-      padding: 20px;
-      border-radius: 12px;
-      box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-    }
-    .temp-value {
-      font-size: 2em;
-      color: #0077cc;
-      font-weight: bold;
-    }
-  </style>
+<style>
+  body { font-family: Arial; text-align:center; margin:20px; background:#f4f4f4; }
+  h2 { color:#333; margin-bottom:20px; }
+  .panel-maestra {
+    background:#fff; padding:15px; margin:10px auto;
+    border-radius:10px; box-shadow:0 4px 8px rgba(0,0,0,0.2);
+    max-width:400px; text-align:center;
+  }
+  .accordion {
+    background:white; padding:15px; margin:10px auto;
+    border-radius:10px; box-shadow:0 4px 8px rgba(0,0,0,0.2);
+    cursor:pointer; max-width:500px; text-align:left;
+  }
+  .panel {
+    padding:15px; display:none;
+    background:#e9e9e9; margin-top:10px;
+    border-radius:5px; text-align:center;
+  }
+  button {
+    padding:10px 20px; margin:5px;
+    border:none; border-radius:5px;
+    font-weight:bold; cursor:pointer;
+    font-size:16px;
+  }
+  .on { background-color:#4CAF50; color:white; }
+  .off { background-color:#f44336; color:white; }
+  .timer-btn { background-color: #0077cc; color:white; transition: background 0.2s; }
+  .timer-btn:hover { background-color: #005fa3; }
+  .estado { font-weight:bold; padding:2px 6px; border-radius:4px; }
+  .estado.ON { background-color:#4CAF50; color:white; }
+  .estado.OFF { background-color:#f44336; color:white; }
+  .estado.DESCONECTADO { background-color:#999; color:white; }
+  input[type=time] { padding:5px; margin:5px; font-size:14px; }
+  .sensor-box {
+    background:#fff; padding:10px; margin:10px auto;
+    border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,0.15);
+    max-width:300px;
+  }
+  .sensor-box h4 { margin:5px 0; }
+  .sensor-value { font-size:1.4em; font-weight:bold; }
+  .temp { color:#0077cc; }
+  .hum { color:#009688; }
+</style>
 </head>
-
 <body>
 
-  <h2>💧 Panel de Control de Riegos LoRa</h2>
+<h2>💧 Panel de Control de Riegos LoRa</h2>
 
-  <!-- 🌡️ Caja que muestra la temperatura actual -->
-  <div class="temp-box">
-    <h3>🌡️ Temperatura actual</h3>
-    <div class="temp-value" id="tempValue">-- °C</div>
-  </div>
+<!-- Válvula maestra siempre visible con estilo acordeón -->
+<div style="
+    background:white;
+    padding:15px;
+    margin:10px auto;
+    border-radius:10px;
+    box-shadow:0 4px 8px rgba(0,0,0,0.2);
+    max-width:500px;
+    text-align:left;
+    display:inline-flex;       /* Usamos inline-flex para que el ancho se ajuste al contenido */
+    gap:10px;                  /* Separación entre texto y estado */
+    align-items:center;
+    cursor:default;
+">
+  <span>🚰 Válvula Maestra</span>
+  <span id="estadoMaestra" class="estado DESCONECTADO">DESCONECTADO</span>
+</div>
 
-  <!-- 📦 Aquí se generan dinámicamente los 8 módulos de riego -->
-  <div id="riegos"></div>
 
-  <script>
-    // ✅ 1. Conexión al broker MQTT (vía WebSockets seguros wss://)
-    const client = mqtt.connect("wss://f5f8fae4d9aa4d8690cb5ff83429436c.s1.eu.hivemq.cloud:8884/mqtt", {
-      username: "Lora123", // usuario MQTT
-      password: "Lora1234" // contraseña MQTT
-    });
+<div id="riegos"></div>
+<br>
+<button class="timer-btn" onclick="consultarTodos()">🌐 Consultar estado de todos los riegos</button>
 
-    // ✅ 2. Cuando se conecta al broker:
-    client.on("connect", () => {
-      console.log("✅ Conectado al broker MQTT");
+<script>
+// ======================== ESTADOS ========================
+const estadosNodo = {};
+for (let i = 1; i <= 8; i++) {
+  estadosNodo[i] = { estado: "DESCONECTADO", temperatura: "-- °C", humedad: "-- %" };
+}
 
-      // 🔁 Nos suscribimos al estado de cada uno de los 8 riegos
-      for (let i = 1; i <= 8; i++) {
-        client.subscribe(`campo1/riego${i}/estado`);
-      }
+// ======================== MQTT ========================
+const client = mqtt.connect("wss://f5f8fae4d9aa4d8690cb5ff83429436c.s1.eu.hivemq.cloud:8884/mqtt", {
+  username: "Lora123",
+  password: "Lora1234"
+});
 
-      // 📡 También nos suscribimos al sensor de temperatura
-      client.subscribe("sensor/temperatura");
-      console.log("📡 Suscrito a sensor/temperatura");
-    });
+client.on("connect", () => {
+  console.log("✅ Conectado al broker MQTT");
+  for (let i = 1; i <= 8; i++) {
+    client.subscribe(`campo1/riego${i}/estado`);
+    client.subscribe(`campo1/riego${i}/temperatura`);
+    client.subscribe(`campo1/riego${i}/humedad`);
+  }
+  client.subscribe("campo1/broadcast");
+  client.subscribe("campo1/valvulaMaestra/estado"); // Válvula maestra
 
-    // ✅ 3. Cuando llega un mensaje MQTT:
-    client.on("message", (topic, message) => {
-      const msg = message.toString(); // convertimos el mensaje a texto
-      console.log("📩 Mensaje recibido:", topic, msg);
+  consultarTodos();
+});
 
-      // 🔄 Si el mensaje es el estado de alguno de los riegos:
-      for (let i = 1; i <= 8; i++) {
-        if (topic === `campo1/riego${i}/estado`) {
-          // Actualizamos el texto en pantalla (ON/OFF/DESCONOCIDO)
-          document.getElementById(`estado${i}`).innerText = msg;
-        }
-      }
+client.on("message", (topic, message) => {
+  const msg = message.toString();
 
-      // 🌡️ Si el mensaje es la temperatura, actualizamos el valor en tiempo real
-      if (topic === "sensor/temperatura") {
-        document.getElementById("tempValue").innerText = `${msg} °C`;
-      }
-    });
+  // ===== Válvula maestra =====
+  if(topic === "campo1/valvulaMaestra/estado"){
+    const span = document.getElementById("estadoMaestra");
+    span.innerText = msg;
+    span.className = `estado ${msg}`; // Cambia color según estado
+  }
 
-    // ✅ 4. Crear dinámicamente los 8 módulos de riego con botones ON/OFF
-    const contenedor = document.getElementById("riegos");
-    for (let i = 1; i <= 8; i++) {
-      contenedor.innerHTML += `
-        <div class="accordion">💧 Riego ${i} - Estado: 
-          <span class="estado" id="estado${i}">DESCONOCIDO</span>
-        </div>
-        <div class="panel">
-          <button class="on" onclick="enviarComando(${i}, 'ON')">ON</button>
-          <button class="off" onclick="enviarComando(${i}, 'OFF')">OFF</button>
-        </div>
-      `;
-    }
+  // ===== Estado nodos =====
+  let match = topic.match(/riego(\d+)\/estado/);
+  if (match) {
+    const id = parseInt(match[1]);
+    estadosNodo[id].estado = msg;
+    const span = document.getElementById(`estado${id}`);
+    span.innerText = msg;
+    span.className = `estado ${msg}`;
+  }
 
-    // ✅ 5. Configurar el comportamiento del acordeón (mostrar/ocultar botones)
-    document.querySelectorAll(".accordion").forEach((acc) => {
-      acc.addEventListener("click", () => {
-        const panel = acc.nextElementSibling;
-        panel.style.display = panel.style.display === "block" ? "none" : "block";
-      });
-    });
+  // ===== Temperatura =====
+  match = topic.match(/riego(\d+)\/temperatura/);
+  if (match) {
+    const id = parseInt(match[1]);
+    estadosNodo[id].temperatura = msg + " °C";
+    document.getElementById(`temp${id}`).innerText = estadosNodo[id].temperatura;
+  }
 
-    // ✅ 6. Función para enviar comandos MQTT al broker
-    function enviarComando(num, cmd) {
-      const topic = `campo1/riego${num}/comando`; // topic del riego correspondiente
-      client.publish(topic, cmd); // enviamos el comando ("ON" o "OFF")
-      console.log(`📤 Comando enviado a ${topic}: ${cmd}`);
+  // ===== Humedad =====
+  match = topic.match(/riego(\d+)\/humedad/);
+  if (match) {
+    const id = parseInt(match[1]);
+    estadosNodo[id].humedad = msg + " %";
+    document.getElementById(`hum${id}`).innerText = estadosNodo[id].humedad;
+  }
+});
 
-      // 🪄 Actualizamos el estado en pantalla inmediatamente (sin esperar respuesta)
-      document.getElementById(`estado${num}`).innerText = cmd;
-    }
-  </script>
+// ======================== Crear interfaz ========================
+const contenedor = document.getElementById("riegos");
+for (let i = 1; i <= 8; i++) {
+  contenedor.innerHTML += `
+    <div class="accordion">💧 Riego ${i} - Estado: <span class="estado DESCONECTADO" id="estado${i}">${estadosNodo[i].estado}</span></div>
+    <div class="panel">
+      <div class="sensor-box">
+        <h4>🌡️ Temperatura: <span class="sensor-value temp" id="temp${i}">${estadosNodo[i].temperatura}</span></h4>
+        <h4>💧 Humedad: <span class="sensor-value hum" id="hum${i}">${estadosNodo[i].humedad}</span></h4>
+      </div>
+
+      <button class="on" onclick="enviarComando(${i}, 'ON')">ON</button>
+      <button class="off" onclick="enviarComando(${i}, 'OFF')">OFF</button>
+      <button class="timer-btn" onclick="consultarRiego(${i})">🔍 Consultar estado</button>
+
+      <div class="timer-section">
+        <h4>⏱️ Programar inicio y duración</h4>
+        <label>Hora de inicio:</label><br>
+        <input type="time" id="horaInicio${i}" step="60" value="06:00"><br>
+        <label>Duración (HH:MM):</label><br>
+        <input type="time" id="duracion${i}" step="60" value="00:30"><br>
+        <button class="timer-btn" onclick="programarTemporizador(${i})">Programar temporizador</button>
+        <div id="confirmacion${i}" style="margin-top:5px;color:#0077cc;font-weight:bold;"></div>
+      </div>
+    </div>
+  `;
+}
+
+// ======================== Acordeones ========================
+document.querySelectorAll(".accordion").forEach(acc => {
+  acc.addEventListener("click", () => {
+    const panel = acc.nextElementSibling;
+    panel.style.display = panel.style.display === "block" ? "none" : "block";
+  });
+});
+
+// ======================== Funciones ========================
+function enviarComando(num, cmd) {
+  const topic = `campo1/riego${num}/comando`;
+  const mensaje = cmd + num;
+  client.publish(topic, mensaje);
+  document.getElementById(`estado${num}`).innerText = "⏳ Enviando...";
+}
+
+function programarTemporizador(num) {
+  const horaInicio = document.getElementById(`horaInicio${num}`).value;
+  const duracion = document.getElementById(`duracion${num}`).value;
+  if (!horaInicio || !duracion) { alert("⚠️ Ingresa una hora de inicio y duración válida"); return; }
+  const mensaje = `STARTTIMER${num}:${horaInicio}-${duracion}`;
+  client.publish(`campo1/riego${num}/comando`, mensaje);
+  document.getElementById(`confirmacion${num}`).innerText =
+    `✅ Temporizador enviado: se encenderá a las ${horaInicio} durante ${duracion} (HH:MM)`;
+}
+
+function consultarRiego(num) {
+  client.publish(`campo1/riego${num}/comando`, `status${num}?`);
+  document.getElementById(`estado${num}`).innerText = "⏳ Consultando...";
+}
+
+function consultarTodos() {
+  console.log("📡 Enviando broadcast para consultar estado de todos los nodos...");
+  client.publish("campo1/broadcast", "STATUS_ALL");
+  for (let i = 1; i <= 8; i++) {
+    document.getElementById(`estado${i}`).innerText = "⏳ Consultando...";
+  }
+}
+</script>
 </body>
 </html>
