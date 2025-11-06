@@ -201,7 +201,7 @@ function consultarRiego(num) {
 
 function consultarTodos() {
   console.log("📡 Enviando broadcast para consultar estado de todos los nodos...");
-  client.publish("campo1/broadcast", "STATUS_ALL");
+  client.publish("campo1/gateway/comando", "STATUS_GATEWAY?");
   for (let i = 1; i <= 8; i++) {
     document.getElementById(`estado${i}`).innerText = "⏳ Consultando...";
   }
