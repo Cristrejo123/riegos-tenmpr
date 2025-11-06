@@ -206,6 +206,100 @@ function consultarTodos() {
     document.getElementById(`estado${i}`).innerText = "⏳ Consultando...";
   }
 }
+
+// ======================== ESTADO DEL GATEWAY ========================
+let gatewayTimeout = null;
+let gatewayIntentos = 0;
+const tiempoRespuesta = 5000; // 5 segundos entre intentos
+const maxIntentos = 2;         // Si falla 2 veces, se marca desconectado
+
+// Crear visualmente el estado del gateway
+const divGateway = document.createElement("div");
+divGateway.style = `
+  background:white;
+  padding:15px;
+  margin:10px auto;
+  border-radius:10px;
+  box-shadow:0 4px 8px rgba(0,0,0,0.2);
+  max-width:500px;
+  text-align:left;
+  display:inline-flex;
+  gap:10px;
+  align-items:center;
+  cursor:default;
+`;
+divGateway.innerHTML = `<span>🛰️ Gateway</span>
+<span id="estadoGateway" class="estado DESCONECTADO">DESCONECTADO</span>`;
+document.body.insertBefore(divGateway, document.getElementById("riegos"));
+
+// Suscribirse al estado del gateway
+client.subscribe("campo1/gateway/estado");
+
+// Cuando llega un mensaje del gateway
+client.on("message", (topic, message) => {
+  const msg = message.toString();
+
+  // ===== GATEWAY =====
+  if (topic === "campo1/gateway/estado") {
+    clearTimeout(gatewayTimeout);
+    gatewayIntentos = 0;
+
+    const span = document.getElementById("estadoGateway");
+    span.innerText = msg;
+    span.className = `estado ${msg}`;
+
+    // Si vuelve a estar ONLINE, no tocar los demás
+    return;
+  }
+});
+
+// Función que consulta si el gateway está vivo
+function verificarGateway() {
+  const span = document.getElementById("estadoGateway");
+  span.innerText = "⏳ Verificando...";
+  span.className = "estado DESCONECTADO";
+
+  console.log("📡 Consultando estado del Gateway...");
+  client.publish("campo1/gateway/comando", "STATUS_GATEWAY?");
+
+  gatewayTimeout = setTimeout(() => {
+    gatewayIntentos++;
+    if (gatewayIntentos < maxIntentos) {
+      console.warn("⚠️ No hubo respuesta del gateway, reintentando...");
+      verificarGateway(); // nuevo intento
+    } else {
+      console.error("❌ Gateway no responde");
+      span.innerText = "DESCONECTADO";
+      span.className = "estado DESCONECTADO";
+      gatewayIntentos = 0;
+
+      // 🔥 Publicar en el broker que el gateway está desconectado
+      client.publish("campo1/gateway/estado", "DESCONECTADO");
+
+      // 🔥 También marcar y publicar todos los nodos y la válvula maestra como desconectados
+      for (let i = 1; i <= 8; i++) {
+        document.getElementById(`estado${i}`).innerText = "DESCONECTADO";
+        document.getElementById(`estado${i}`).className = "estado DESCONECTADO";
+        client.publish(`campo1/riego${i}/estado`, "DESCONECTADO");
+      }
+
+      const maestra = document.getElementById("estadoMaestra");
+      maestra.innerText = "DESCONECTADO";
+      maestra.className = "estado DESCONECTADO";
+      client.publish("campo1/valvulaMaestra/estado", "DESCONECTADO");
+    }
+  }, tiempoRespuesta);
+}
+
+// Llamar a la verificación inicial al conectar
+client.on("connect", () => {
+  setTimeout(verificarGateway, 1000);
+});
+
+// También puedes volver a verificar cada cierto tiempo
+setInterval(verificarGateway, 60000); // cada 1 minuto
+
+
 </script>
 </body>
 </html>
